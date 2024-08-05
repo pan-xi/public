@@ -1,5 +1,18 @@
 - LFS目标：从一个**完全**、**干净**的用户，从头开始构建、**编译**出一个系统（恍然大悟，一开始以为是手搓内核，准确来说是使用已有软件包和内核编译出一个系统 :doge:）
+	- 对目标更深的感悟：构建系统所需工具、依赖、软件包，再结合Linux内核，形成一个完整的操作系统
 - 我的目标：更适合像我一样的参考的LFS( :doge: )
+#### 所有定义的变量
+```bash
+HOME=/home/lfs
+TERM=xterm
+SHELL=/bin/bash
+LFS=/mnt/lfs
+LC_ALL=POSIX
+LFS_TGT=$(uname -m)-lfs-linux-gnu=x86_64-lfs-linux-gnu
+PATH=$LFS/tools/bin:/usr/bin
+CONFIG_SITE=$LFS/usr/share/config.site
+MAKEFLAGS=-j88
+```
 #### 待补
 - [ ] [源码编译](https://moi.vonos.net/linux/beginners-installing-from-source/)
 - [ ] [软件编译、安装](https://tldp.org/HOWTO/Software-Building-HOWTO.html)
@@ -240,6 +253,9 @@ cat > ~/.bash_profile \<< "EOF"
 	- `CONFIG_SITE=$LFS/usr/share/config.site`
 		- 在第 5 章和第 6 章中，如果没有设定这个变量，configure 脚本可能会从宿主系统的` /usr/share/ config.site` 加载⼀些发⾏版特有的配置信息。
 		- 覆盖这⼀默认路径，**避免宿主系统可能造成的污染**。
+		- 如果 `configure` 找不到 `config.site` 文件（无论是因为路径不存在，或者 `CONFIG_SITE` 变量为空），它并不会报错停止。
+		- 相反，`configure` 会 **忽略** `config.site` 文件，并继续执行配置过程。 它会根据自身的默认设置、你提供的命令行参数以及系统探测结果来生成 `Makefile` 文件。
+		- 换句话说，找不到 `config.site` 不会导致构建失败，只是意味着 `configure` 将不会使用任何预设的外部配置信息。
 		- `/usr/share/config.site` 文件通常用于存储**编译系统范围**的配置选项，这些选项会被 `configure` 脚本读取，用于定制软件包的编译过程。
 			- **集中管理编译选项:** 将通用的编译选项放在 `/usr/share/config.site` 文件中，可以避免在编译每个软件包时都重复指定这些选项。
 			- **定制系统级编译行为:** 可以通过修改 `/usr/share/config.site` 文件，来改变系统上所有软件包的默认编译行为，例如指定编译器优化级别、默认安装路径等。
@@ -458,7 +474,7 @@ readelf -l /usr/bin/bash | grep interpreter
 		- 如：**GCC 编译器的优化选项**、**Glibc 的线程支持**
 		- 由于 GCC 和 Glibc 的配置脚本都需要测试汇编器和链接器的功能，因此 **必须先安装 Binutils**，才能保证配置脚本能够正常运行。
 		- 如果在没有安装 Binutils 的情况下运行配置脚本，可能会导致配置失败，或者构建出的 GCC 和 Glibc 无法正常工作。
-- Binutils 将汇编器和链接器安装在两个位置，⼀个是 $LFS/tools/bin，另⼀个是 $LFS/tools/$LFS_TGT/ bin。这两个位置中的⼯具**互为硬链接**。
+- Binutils 将汇编器和链接器安装在两个位置，⼀个是 \$LFS/tools/bin，另⼀个是 \$LFS/tools/$LFS_TGT/ bin。这两个位置中的⼯具**互为硬链接**。
 	- 链接器的⼀项重要属性是它搜索库的顺序，通过向 ld 命令加⼊ - -verbose 参数，可以得到关于搜索路径的详细信息。例如，ld --verbose | grep SEARCH 会输出当前 的搜索路径及其顺序。
 - 下⼀步安装 GCC。在执⾏它的 configure 脚本时，您会看到类似下⾯这样的输出：
 	```bash
@@ -555,4 +571,52 @@ ls -l /etc/alternatives/yacc
 		- a. 使⽤ tar 程序，解压需要构建的软件包。在第 5 章和第 6 章中解压软件包时，确认您以 ⽤⼾ lfs 的⾝份登录。 除了使⽤ tar 命令解压源码包外，不要使⽤其他任何将源代码⽬录树置⼊⼯作⽬录的⽅ 法。特别需要注意的是，使⽤ cp -R 从其他位置复制源代码⽬录树会破坏其中的链接和 时间戳，并导致构建失败。
 		- b. 切换到解压源码包时产⽣的⽬录。
 		- c. 根据指⽰构建软件包。
-		- d. 构建完成后，切换回包含所有源码包的⽬录。 e. 除⾮另有说明，删除解压出来的⽬录。
+		- d. 构建完成后，切换回包含所有源码包的⽬录.
+		- e. 除⾮另有说明，删除解压出来的⽬录。
+### 编译交叉工具
+- 本章中编译的程序会被安装在 $LFS/tools ⽬录中，以将它们和后续章节中安装的⽂件分开。
+- 但是，本章 中编译的库会被安装到它们的最终位置，因为这些库在我们最终要构建的系统中也存在。
+#### binutils once
+- Binutils 包含汇编器、链接器以及其他⽤于处理⽬标⽂件的⼯具。
+	- 估计构建时间: 1 SBU
+	- 需要硬盘空间: 663 MB
+- ⾸先构建 Binutils 相当重要，因为 Glibc 和 GCC 都会对可⽤的链接器和汇编器进⾏测试，以决定可以启 ⽤它们⾃带的哪些特性。
+- Binutils ⽂档推荐创建⼀个新的⽬录，以在其中构建 Binutils：
+- 配置选项的含义： 
+	- --prefix=\$LFS/tools 这告诉配置脚本准备将 Binutils 程序安装在 \$LFS/tools ⽬录中。
+	- --with-sysroot=\$LFS 该选项告诉构建系统，交叉编译时在 \$LFS 中寻找⽬标系统的库。
+	- --target=$LFS_TGT 由于 LFS_TGT 变量中的机器描述和 config.guess 脚本的输出略有不同, 这个开关使得 configure 脚 本调整 Binutils 的构建系统，以构建交叉链接器。
+		- 
+	- --disable-nls 该选项禁⽤临时⼯具不需要的国际化功能。 
+	- --enable-gprofng=no 该选项禁⽤临时⼯具不需要的 gprofng ⼯具。
+	- --disable-werror 该选项防⽌宿主系统编译器警告导致构建失败。
+	- --enable-default-hash-style=gnu 默认情况下，链接器会为共享库和动态链接的可执⾏⽂件同时⽣成 GNU ⻛格的散列表和经典的 ELF 散列表。散列表仅供动态链接器进⾏符号查询。LFS 系统的动态链接器 (由 Glibc 软件包提供) 总是使⽤查询更快的 GNU ⻛格散列表。因此经典 ELF 散列表完全没有意义。该选项使得链接器在默认 情况下只⽣成 GNU ⻛格散列表，以避免为⽣成和存储经典 ELF 散列表浪费时间和空间。
+```bash
+# accordding the summary of the general step of the install, there work directory is the '/mnt/lfs/sources/'
+# opreator is "lfs"
+# /mnt/lfs/sources
+pwd
+
+# decompressed the source.tar.xz
+# error: tar: v: Cannot open: No such file or directory
+# error: tar: Error is not recoverable: exiting now
+# the error is becoming the value, '-f' needs to follow a filename, 'xfv' may put the 'v' to 'f', so "No such file or directory"
+# and the permition of the file, in the action of change owner, only change the directory, so remake!
+tar -xfv binutils-2.42.tar.xz
+
+tar -xvf binutils-2.42.tar.xz
+cd binutils-2.42
+mkdir -v build
+cd build
+
+# execute the compiling and making
+time { ../configure --prefix=$LFS/tools \
+> --with-sysroot=$LFS \
+> --target=$LFS_TGT \
+> --disable-nls \
+> --enable-gprofng=no \
+> --disable-werror \
+> --enable-default-hash-style=gnu \
+> && make && make install; }
+
+```
