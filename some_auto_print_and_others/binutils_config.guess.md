@@ -281,6 +281,7 @@ case $UNAME_MACHINE:$UNAME_SYSTEM:$UNAME_RELEASE:$UNAME_VERSION in
 	# 如果是NetBSD系统
 	# NetBSD系统指的内核是NetBSD，与linux无交叉，都是unixlike内核
     *:NetBSD:*:*)
+	# 带BSD的是都属于BSD的“后裔”
 	# NetBSD (nbsd) targets should (where applicable) match one or
 	# more of the tuples: *-*-netbsdelf*, *-*-netbsdaout*,
 	# *-*-netbsdecoff* and *-*-netbsd*.  For targets that recently
