@@ -7,17 +7,31 @@
 - [ ] 在定义脚本路径的地方，case分支的第二个分支
 	- 每次执行for循环分支都要执行`IFS=$as_save_IFS `，其实整体逻辑可以调整一下，先分隔，再用for去处理，分隔后的结果可以存储在一个字符串中，并用空格进行分隔（保证对老旧版本的兼容性，老版本可能不支持数组），然后再执行`IFS=$as_save_IFS `和for循环
 	- 在for循环结束后再次执行`IFS=$as_save_IFS `，这一步也可以优化掉
+	- [ ] 在“一大段if的开始”这一部分，这部分的工作是假如当前shell不能满足`as_required`或`as_suggested`(需要和建议)，同样也是在每次执行for循环时要执行`IFS=$as_save_IFS `，其实可以优化一下
 - [ ] 在`BASH_ENV=/dev/null  `这里，搞不懂为什么前面的for循环已经unset了，这里还要再设置成/dev/null后再一次unset
 	- 有可能是为了清空重新启动指定的shell的环境变量，但是他也没有显式地使用`BASH_ENV`，也没有export
 	- gemini解释地非常牵强！！！
 - [ ] `as_fn_exit`没被定义就直接使用了？？
 - [ ] 目前卡在了这段代码的分隔，太坑了，在服务器运行都运行不明白
+	- [ ] 现在分行是搞明白了，但是还是调试不明白
 ```bash
+  as_suggested="  as_lineno_1=";
+  
+  as_suggested=$as_suggested$LINENO;
+  
+  as_suggested=$as_suggested" as_lineno_1a=\$LINENO   as_lineno_2=";
+  
+  as_suggested=$as_suggested$LINENO;
+  
   as_suggested=$as_suggested" as_lineno_2a=\$LINENO  
   eval 'test \"x\$as_lineno_1'\$as_run'\" != \"x\$as_lineno_2'\$as_run'\" &&  
-  test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1  
-test \$(( 1 + 1 )) = 2 || exit 1"  
+  test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1  test \$(( 1 + 1 )) = 2 || exit 1"  
+
 ```
+- [ ] 逻辑有问题，在寻找可用的shell的时候（设置CONFIG_SHELL，很长一段if），如果一开始测试as_required和as_suggested不成功，且没有搜索成功，还将换回当前shell
+	- [ ] 这里有个问题：之前测试当前shell不成功，这里又设置回去了
+- [ ] 在测试mkdir的时候（as_fn_mkdir_p ()  内） 逻辑有误，空执行 eval $as_mkdir_p，这肯定是false啊
+- [ ] 阅读策略有点问题，但是不知道如何解决这个问题，比如前面一直在定义环境和函数，定义环境没啥问题，但是定义函数，函数是后面要执行的，所以函数内涉及的变量可能是后面定义的，就导致很烦
 ### 总览
 - Guess values for system-dependent variables and create Makefiles.
 	- 这个文件看起来像是用于配置软件构建系统的脚本， 它会检查系统环境和软件依赖， 然后生成用于编译软件的 Makefile 文件
@@ -29,6 +43,9 @@ test \$(( 1 + 1 )) = 2 || exit 1"
 - `case $arg in #(  *"$as_nl"*)  `
 	- 巨坑！！！
 	- 在case语句中`#(`代表开启扩展正则的模式匹配，在这个模式下\*代表通配符，就像在shell终端里的`rm -rf *`一样，不再是普通正则里的`a*`代表“任意个”的意思
+- 哈哈哈哈哈，吐槽sed语法，好！很有精神！
+	- ` # Blame Lee E. McMahon (1931-1989) for sed's syntax.  :-) `
+
 ### 变量记录
 #### 没用的
 - `DUALCASE=1; export DUALCASE`
@@ -48,13 +65,15 @@ test \$(( 1 + 1 )) = 2 || exit 1"
 - windows的系统环境
 	- PATH_SEPARATOR=；
 - `CONFIG_SHELL`，使用指定的路径下的shell重新运行脚本
+- `as_opt`，与CONFIG_SHELL搭配使用，用于指定shell的操作选项
 - `_as_can_reexec`，指明脚本是否存在递归调用，影响了脚本是否可以被CONFIG_SHELL重新执行
+- `as_bourne_compatible`，让当前shell兼容Bourne shell的语法，主要针对Zsh，与上面操作类似，解决传参兼容性和POSIX兼容模式
 #### 与我环境相关的
 - 打印调用的函数
 	- as_echo='printf %s\\n'  
 	- as_echo_n='printf %s'
 	- printf函数内置在（大多发行版）shell里
-- 系统环境：`PATH_SEPARATOR=:`
+- 系统环境(分隔符)：`PATH_SEPARATOR=:`
 - `IFS=" ""    $as_nl"  `：指定参数分隔符
 ```bash 
 # 主提示符
@@ -64,7 +83,9 @@ PS2='> '
 # 调试提示符，在 shell 跟踪调试模式下， 在每个命令执行前显示 + 和一个空格
 PS4='+ '  
 ```
-- `as_myself='/mnt/lfs/sources/binutils-2.42/configure'`
+- `as_myself='/mnt/lfs/sources/binutils-2.42/configure'`存储的是脚本自身完整路径
+- 取消`CDPATH`，尽管我就没有这个变量，但是执行这个操作
+- `LC_ALL=C; LANGUAGE=C`
 - 解决Zsh兼容性问题（用不到）
 ```bash
   as_bourne_compatible="if test -n \"\${ZSH_VERSION+set}\" && (emulate sh) >/dev/null 2>&1; then :  
@@ -85,7 +106,45 @@ esac
 fi  
 "  
 ```
-- shell的必要函数
+- `as_required`定义了一些必要的shell函数，主要包括函数调用返回值、根据函数执行状态做返回值
+```bash
+  as_required="as_fn_return () { (exit \$1); }  
+as_fn_success () { as_fn_return 0; }  
+as_fn_failure () { as_fn_return 1; }  
+as_fn_ret_success () { return 0; }  
+as_fn_ret_failure () { return 1; }  
+  
+exitcode=0  
+# 注意此处的逻辑运算的逻辑，当前面的命令运行成功，退出码为0，但是是“执行成功”，所以用 || 表示不执行右边的命令
+as_fn_success || { exitcode=1; echo as_fn_success failed.; }  
+as_fn_failure && { exitcode=1; echo as_fn_failure succeeded.; }  
+as_fn_ret_success || { exitcode=1; echo as_fn_ret_success failed.; }  
+as_fn_ret_failure && { exitcode=1; echo as_fn_ret_failure succeeded.; }  
+# 测试shell的保存位置参数的能力是否正常（虽然我感觉对现在来说没什么作用，就没遇到过shell不能正确保存参数的）
+	# 测试保存位置参数的能力对于 shell 命令的执行至关重要，因为它关系到脚本能否正确处理和传递参数，从而影响到脚本的正确性和功能。
+if ( set x; as_fn_ret_success y && test x = \"\$1\" ); then :  
+  
+else  
+  exitcode=1; echo positional parameters were not saved.  
+fi  
+test x\$exitcode = x0 || exit 1  
+# 检查根目录 / 是否存在并且可执行。如果根目录不存在或不可执行，则表示系统环境存在问题，脚本会退出并返回退出码 1
+test -x / || exit 1"  
+```
+- `as_suggested`定义了一些shell功能测试，包括是否支持基本的行号变量LINENO、算术表达式、是否正确执行eval命令
+- `CLICOLOR_FORCE= GREP_OPTIONS=  `
+	- `CLICOLOR_FORCE`  变量通常用于强制在终端输出彩色文本。
+	- `GREP_OPTIONS` 变量用于设置 grep 命令的默认选项。
+- `as_unset=as_fn_unset `，`as_fn_unset()`：以一种可移植的方式取消设置变量 
+- `as_fn_set_status () `：将函数的第一个参数（`$1`）作为返回值返回
+- `as_fn_exit ()  `:返回错误码，即使是在trap 0或set -e的情况下也可以生效，方便处理错误码
+- `as_fn_mkdir_p () `：实现`mkdir -p`的效果
+- `as_fn_executable_p ()  `：测试指定文件是否为可执行的常规文件
+- `as_fn_append () `：字符串追加操作定义
+- `as_fn_arith () `: 算术运算定义
+- `as_fn_error () `：将错误信息写入指定的日志文件，并使用指定的状态码调用`as_fn_exit`来退出脚本
+- `as_expr=expr ; as_basename=basename; as_dirname=dirname `：expr（正则表达匹配）是否可用、basename（用于shell脚本中提取自身文件名）是否可用、dirname（获取父目录）是否可用
+- `as_me`：存储当前脚本名称
 ### 代码
 ```bash
 #! /bin/sh  
@@ -450,38 +509,35 @@ test -x / || exit 1"
   as_lineno_2=";
   as_suggested=$as_suggested$LINENO;
   # eval的工作：判断as_lineno_1
+  # 一些建议的 shell 功能测试，例如检查行号和简单的算术运算
   as_suggested=$as_suggested" as_lineno_2a=\$LINENO  
   eval 'test \"x\$as_lineno_1'\$as_run'\" != \"x\$as_lineno_2'\$as_run'\" &&  
   test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1  
 test \$(( 1 + 1 )) = 2 || exit 1"  
 
 
-
-
-
-as_suggested="  as_lineno_1=";as_suggested=$as_suggested$LINENO;as_suggested=$as_suggested" as_lineno_1a=\$LINENO  
-  as_lineno_2=";as_suggested=$as_suggested$LINENO;as_suggested=$as_suggested" as_lineno_2a=\$LINENO  
-  eval 'test \"x\$as_lineno_1'\$as_run'\" != \"x\$as_lineno_2'\$as_run'\" &&  
-  test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1  
-test \$(( 1 + 1 )) = 2 || exit 1"
-
-
-
-
-
-
-
-
+# 开始测试as_required
   if (eval "$as_required") 2>/dev/null; then :  
   as_have_required=yes  
 else  
   as_have_required=no  
 fi  
-  if test x$as_have_required = xyes && (eval "$as_suggested") 2>/dev/null; then :  
-  
+
+
+
+
+# 一大段if的开始
+# 如果 as_have_required=yes，则执行 as_suggested 中定义的测试
+if test x$as_have_required = xyes && (eval "$as_suggested") 2>/dev/null; then :  
+
+# 如果 as_required 测试失败或者 as_suggested 测试失败，则执行后续代码块，尝试寻找合适的 shell（设置CONFIG_SHELL）
+# 整体的逻辑是通过PATH_SEPARATOR做分隔符去在PATH里搜索可用的shell，找到一个就开始测试shell可执行文件是否存在，且as_required或as_suggested是否可以测试成功
+# 如果找到CONFIG_SHELL并测试成功，就重新运行当前脚本，不成功就打印帮助信息并退出
 else  
   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR  
 as_found=false  
+# 双层for循环，外层处理PATH，PATH=/bin:/usr/bin:$PATH
+# 内层去寻找具体的可执行文件
 for as_dir in /bin$PATH_SEPARATOR/usr/bin$PATH_SEPARATOR$PATH  
 do  
   IFS=$as_save_IFS  
@@ -492,6 +548,7 @@ do
        for as_base in sh bash ksh sh5; do  
          # Try only shells that exist, to save several forks.  
          as_shell=$as_dir/$as_base  
+         # 检查当前 shell 的可执行文件是否存在
          if { test -f "$as_shell" || test -f "$as_shell.exe"; } &&  
             { $as_echo "$as_bourne_compatible""$as_required" | as_run=a "$as_shell"; } 2>/dev/null; then :  
   CONFIG_SHELL=$as_shell as_have_required=yes  
@@ -503,13 +560,14 @@ fi
        esac  
   as_found=false  
 done  
+# 如果测试不成功的话，重新用当前shell来开启兼容性并测试as_required，将CONFIG_SHELL设置为当前shell变量（不一定，也可能CONFIG_SHELL为空，毕竟as_required不一定执行成功，所以有可能为空或者退出脚本）
 $as_found || { if { test -f "$SHELL" || test -f "$SHELL.exe"; } &&  
           { $as_echo "$as_bourne_compatible""$as_required" | as_run=a "$SHELL"; } 2>/dev/null; then :  
   CONFIG_SHELL=$SHELL as_have_required=yes  
 fi; }  
 IFS=$as_save_IFS  
   
-  
+  # 如果找到了合适的shell，CONFIG_SHELL不为空，则重新用找到的shell使用exec命令来用新的shell执行当前脚本（此时还是在else分支内，与我自己正常执行过程无关）
       if test "x$CONFIG_SHELL" != x; then :  
   export CONFIG_SHELL  
              # We cannot yet assume a decent shell, so we have to provide a  
@@ -525,19 +583,23 @@ case $- in # ((((
   *x* ) as_opts=-x ;;  
   * ) as_opts= ;;  
 esac  
+# 上面的一些动作跟前面是一样的，取消一些环境变量，添加shell操作描述符、处理传参的兼容性问题，同时使用exec执行新的shell
 exec $CONFIG_SHELL $as_opts "$as_myself" ${1+"$@"}  
 # Admittedly, this is quite paranoid, since all the known shells bail  
 # out after a failed `exec'.  
+# exec可能执行失败，失败后会返回当前shell脚本，继续执行后续代码，这里的处理是让它报错并退出
 $as_echo "$0: could not re-execute with $CONFIG_SHELL" >&2  
 exit 255  
 fi  
-  
+  # as_have_required=no的时候，CONFIG_SHELL一定为空，打印信息，表明shell版本太落后了
     if test x$as_have_required = xno; then :  
   $as_echo "$0: This script requires a shell more modern than all"  
   $as_echo "$0: the shells that I found on your system."  
+  # 如果设置了ZSH_VERSION，打印zsh有bug，而且应该使用4.3.4以后的版本
   if test x${ZSH_VERSION+set} = xset ; then  
     $as_echo "$0: In particular, zsh $ZSH_VERSION has bugs and should"  
     $as_echo "$0: be upgraded to zsh 4.3.4 or later."  
+# 如果ZSH_VERSION没设置就让联系gnu
   else  
     $as_echo "$0: Please tell bug-autoconf@gnu.org about your system,  
 $0: including any error possibly output before this  
@@ -547,7 +609,7 @@ $0: the script under such a shell if you do have one."
   exit 1  
 fi  
 fi  
-fi  
+fi  # 分隔的一大段if到这里才结束，好长一段if
 SHELL=${CONFIG_SHELL-/bin/sh}  
 export SHELL  
 
@@ -555,37 +617,48 @@ export SHELL
 
 
 
-
+# 将 `CLICOLOR_FORCE` 和 `GREP_OPTIONS` 这两个变量设置为空值，并取消两个变量
 # Unset more variables known to interfere with behavior of common tools.  
 CLICOLOR_FORCE= GREP_OPTIONS=  
 unset CLICOLOR_FORCE GREP_OPTIONS  
-  
+
+# 这里定义了一些 M4sh 的 shell 函数
+# M4sh 并不是一个独立的 shell，而是一种在 Autoconf 环境下使用的 shell 脚本语言的约定俗成的称呼，它主要用于编写可移植的 configure 脚本，并最终生成 Makefile。
+# Autoconf是一个用于生成 shell 脚本的工具，这些脚本可以自动配置软件源代码包，使其能够在各种不同的类 Unix 系统上进行编译和安装。
+# M4是一个功能强大的宏处理器，它可以用于各种文本处理和代码生成任务,主要用于将输入文本转换为输出文本，过程中可以使用宏来进行文本替换、文件包含、条件判断等操作。由于其灵活性和可扩展性，M4被广泛应用于软件开发、系统管理等领域。
 ## --------------------- ##  
 ## M4sh Shell Functions. ##  
 ## --------------------- ##  
 # as_fn_unset VAR  
 # ---------------  
 # Portably unset VAR.  
+# 以一种可移植的方式取消设置变量 
 as_fn_unset ()  
 {  
   { eval $1=; unset $1;}  
 }  
 as_unset=as_fn_unset  
-  
+
+# 定义shell的返回函数
 # as_fn_set_status STATUS  
 # -----------------------  
-# Set $? to STATUS, without forking.  
+# Set $? to STATUS, without forking. 
+# 将函数的第一个参数（`$1`）作为返回值返回
 as_fn_set_status ()  
 {  
   return $1  
 } # as_fn_set_status  
-  
+
+# 定义shell的退出函数
 # as_fn_exit STATUS  
 # -----------------  
 # Exit the shell with STATUS, even in a "trap 0" or "set -e" context.  
+# 使用 `STATUS` 作为退出码退出 shell，即使在 "trap 0" 或 "set -e" 的情况下也能生效。
 as_fn_exit ()  
 {  
+# 这行命令关闭了 `errexit` 选项（`set -e`）。 `errexit` 选项会在任何命令返回非零退出码时立即退出脚本。关闭 `errexit` 选项可以确保即使 `as_fn_set_status` 返回非零值，脚本也能继续执行 `exit` 命令。
   set +e  
+  # 将 shell 的返回值设置为函数的第一个参数（`$1`），返回错误码
   as_fn_set_status $1  
   exit $1  
 } # as_fn_exit  
@@ -593,25 +666,34 @@ as_fn_exit ()
 # as_fn_mkdir_p  
 # -------------  
 # Create "$as_dir" as a directory, including parents if necessary.  
+# 实现mkdir-p的操作
 as_fn_mkdir_p ()  
 {  
   
-  case $as_dir in #(  
+  case $as_dir in #(
+  # 判断文件名是否以-开头，以-开头可能被误解为参数，则需要进行处理
   -*) as_dir=./$as_dir;;  
   esac  
+  # 这行代码检查 `as_dir` 是否已经存在且是一个目录。如果是，则直接跳过后续操作（后续操作是指的这一长串的所有操作）
+  # 逻辑有误，如果as_mkdir_p已被设置为mkdir -p的话，还是需要跟操作符（具体的文件夹名字）
   test -d "$as_dir" || eval $as_mkdir_p || {  
     as_dirs=  
+    # 处理文件路径内可能含有“'”单引号的情况，将所有单引号替换成“\'”
     while :; do  
       case $as_dir in #(  
       *\'*) as_qdir=`$as_echo "$as_dir" | sed "s/'/'\\\\\\\\''/g"`;; #'(  
       *) as_qdir=$as_dir;;  
       esac  
+      # 将当前目录（`$as_qdir`）添加到 `as_dirs` 列表的开头。
       as_dirs="'$as_qdir' $as_dirs"  
+      # 这部分代码使用了多种方法来获取 `as_dir` 的父目录，并将结果赋值给 `as_dir` 变量。
+      # “$as_expr X"$as_dir" :”带上后面的几行，这个是一个正则表达式，而"\|"在表达逻辑或
+      #  接着使用 `sed` 命令处理 `as_dir` 变量，目的是获取其父目录，q表示退出sed命令
       as_dir=`$as_dirname -- "$as_dir" ||  
 $as_expr X"$as_dir" : 'X\(.*[^/]\)//*[^/][^/]*/*$' \| \  
      X"$as_dir" : 'X\(//\)[^/]' \| \  
      X"$as_dir" : 'X\(//\)$' \| \  
-     X"$as_dir" : 'X\(/\)' \| . 2>/dev/null ||  
+     X"$as_dir" : 'X\(/\)' \| . 2>/dev/null ||
 $as_echo X"$as_dir" |  
     sed '/^X\(.*[^/]\)\/\/*[^/][^/]*\/*$/{  
         s//\1/  
@@ -632,25 +714,34 @@ $as_echo X"$as_dir" |
       s/.*/./; q'`  
       test -d "$as_dir" && break  
     done  
+    # 如果 `as_dirs` 列表不为空，则使用 `mkdir` 命令创建所有父目录。
     test -z "$as_dirs" || eval "mkdir $as_dirs"  
-  } || test -d "$as_dir" || as_fn_error $? "cannot create directory $as_dir"  
-  
+  }  ||
+  # 最后再次检查 `as_dir` 是否已经存在且是一个目录。如果仍然失败，则调用 `as_fn_error` 函数报告错误。 
+ test -d "$as_dir" || as_fn_error $? "cannot create directory $as_dir"  
   
 } # as_fn_mkdir_p  
-  
+
+
+
 # as_fn_executable_p FILE  
 # -----------------------  
 # Test if FILE is an executable regular file.  
+# 用于测试指定的文件是否为可执行的常规文件
 as_fn_executable_p ()  
 {  
   test -f "$1" && test -x "$1"  
 } # as_fn_executable_p  
+
+
 # as_fn_append VAR VALUE  
 # ----------------------  
 # Append the text in VALUE to the end of the definition contained in VAR. Take  
 # advantage of any shell optimizations that allow amortized linear growth over  
-# repeated appends, instead of the typical quadratic growth present in naive  
+# repeated appends, instead of the typical quadratic growth present in naive 
+# 将一个字符串追加到一个变量的值的末尾。它会根据 shell 的特性选择不同的实现方式，以优化性能（shell支持+=的话可以提高性能）。
 # implementations.  
+# 测试当前 shell 是否支持 `+=` 运算符进行字符串追加操作
 if (eval "as_var=1; as_var+=2; test x\$as_var = x12") 2>/dev/null; then :  
   eval 'as_fn_append ()  
   {  
@@ -662,12 +753,17 @@ else
     eval $1=\$$1\$2  
   }  
 fi # as_fn_append  
-  
+
+
+
 # as_fn_arith ARG...  
 # ------------------  
 # Perform arithmetic evaluation on the ARGs, and store the result in the  
 # global $as_val. Take advantage of shells that can avoid forks. The arguments  
 # must be portable across $(()) and expr.  
+# 实现执行算术运算的功能
+# 测试当前 shell 是否支持 `$(( ... ))` 语法进行算术运算。
+# 在shell终端$(())是执行算数运算，$()是将括号内的当作命令执行
 if (eval "test \$(( 1 + 1 )) = 2") 2>/dev/null; then :  
   eval 'as_fn_arith ()  
   {  
@@ -676,6 +772,8 @@ if (eval "test \$(( 1 + 1 )) = 2") 2>/dev/null; then :
 else  
   as_fn_arith ()  
   {  
+  # 使用 `expr` 命令计算所有参数的算术运算结果，并将结果赋值给全局变量
+  # 如果 `expr` 命令执行失败，则测试其返回值是否为 `1`。如果返回值为 `1`，则表示 `expr` 命令执行失败是因为参数不是有效的数字，而不是因为其他错误。
     as_val=`expr "$@" || test $? -eq 1`  
   }  
 fi # as_fn_arith  
@@ -686,30 +784,46 @@ fi # as_fn_arith
 # Output "`basename $0`: error: ERROR" to stderr. If LINENO and LOG_FD are  
 # provided, also output the error to LOG_FD, referencing LINENO. Then exit the  
 # script with STATUS, using 1 if that was 0.  
+# 输出错误信息到指定日志文件和stderr，并退出脚本，接收四个参数：
+# STAUS：退出状态码，如果为 0，则会被设置为 1。（为了防止脚本执行失败，但是仍退出码为0而忽略错误，更明确指示执行失败）
+# ERROR : 错误信息。
+# LINENO： 行号信息
+# LOG_FD： 日志文件的文件描述符
+# 输出错误信息到标准错误输出（stderr），如果提供了 `LINENO` 和 `LOG_FD`，还会将错误信息输出到指定的日志文件，并使用指定的退出状态码退出脚本。
 as_fn_error ()  
 {  
   as_status=$1; test $as_status -eq 0 && as_status=1  
+  # `LOG_FD`不为空
   if test "$4"; then  
+  # 设置 `as_lineno` 变量为第三个参数（`LINENO`）的值，如果 `LINENO` 为空，则使用默认值。
     as_lineno=${as_lineno-"$3"} as_lineno_stack=as_lineno_stack=$as_lineno_stack  
+    # 将错误信息输出到指定的日志文件描述符 
     $as_echo "$as_me:${as_lineno-$LINENO}: error: $2" >&$4  
   fi  
+  # 将错误信息输出到标准错误输出（stderr）
   $as_echo "$as_me: error: $2" >&2  
+  # 使用as_status退出码，退出脚本
   as_fn_exit $as_status  
 } # as_fn_error  
-  
+
+
+
+# 分别检查了 `expr`, `basename` 和 `dirname` 这三个命令是否可用，并将结果分别存储在变量 `as_expr`, `as_basename` 和 `as_dirname` 中。如果命令可用，则变量的值为命令本身；否则，变量的值为 `false`
+# 测试 `expr` 命令是否可用。
+#  使用 `expr` 命令进行正则表达式匹配，判断 `a` 是否匹配 `a`
 if expr a : '\(a\)' >/dev/null 2>&1 &&  
    test "X`expr 00001 : '.*\(...\)'`" = X001; then  
   as_expr=expr  
 else  
   as_expr=false  
 fi  
-  
+ #  测试 `basename` 命令是否可用。
 if (basename -- /) >/dev/null 2>&1 && test "X`basename -- / 2>&1`" = "X/"; then  
   as_basename=basename  
 else  
   as_basename=false  
 fi  
-  
+# dirname -- /``: 使用 `dirname` 命令获取 `/` 的父目录，并将结果存储在 `as_dir` 变量中，判断 `as_dir` 的值是否为 `/`
 if (as_dir=`dirname -- /` && test "X$as_dir" = X/) >/dev/null 2>&1; then  
   as_dirname=dirname  
 else  
@@ -736,11 +850,13 @@ $as_echo X/"$0" |
       s/.*/./; q'`  
   
 # Avoid depending upon Character Ranges.  
+# 定义了一组变量，用于表示不同类型的字符，包括小写字母、大写字母、字母（大小写）、数字和字母数字字符。它的目的是避免依赖于字符范围，从而提高脚本的可移植性。
+# 在不同的系统和字符编码中，字符范围可能会有所不同。例如，在 ASCII 编码中，字母 `a` 到 `z` 的范围是 97 到 122，但在 EBCDIC 编码中，它们的范围是 129 到 169。如果脚本依赖于特定的字符范围，那么在不同的系统上运行时可能会出现问题。
 as_cr_letters='abcdefghijklmnopqrstuvwxyz'  
 as_cr_LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'  
 as_cr_Letters=$as_cr_letters$as_cr_LETTERS  
 as_cr_digits='0123456789'  
-as_cr_alnum=$as_cr_Letters$as_cr_digits  
+as_cr_alnum=$as_cr_Letters$as_cr_digits    
   
   
   as_lineno_1=$LINENO as_lineno_1a=$LINENO  
