@@ -1,3 +1,4 @@
+**注：当前仅针对第一阶段编译进行记录、模拟**
 ### 问题/待确认/可优化
 - （bash脚本的定义均为第一次出现的地方）
 - [ ] as_echo_n_body定义处的疑问：为什么要打印两次？
@@ -11,10 +12,13 @@
 - [ ] 在`BASH_ENV=/dev/null  `这里，搞不懂为什么前面的for循环已经unset了，这里还要再设置成/dev/null后再一次unset
 	- 有可能是为了清空重新启动指定的shell的环境变量，但是他也没有显式地使用`BASH_ENV`，也没有export
 	- gemini解释地非常牵强！！！
-- [ ] `as_fn_exit`没被定义就直接使用了？？
-- [ ] 目前卡在了这段代码的分隔，太坑了，在服务器运行都运行不明白
-	- [ ] 现在分行是搞明白了，但是还是调试不明白
+- [x] `as_fn_exit`没被定义就直接使用了？？
+	-  前面都属于定义阶段，就像定义函数一样，并不会被真正执行
+	-  真正执行的时候，这些变量都会被展开
+- [x] 目前卡在了这段代码的分隔，太坑了，在服务器运行都运行不明白
+	- [x] 现在分行是搞明白了，但是还是调试不明白
 ```bash
+# 搞明白了，设计许多变量展开
   as_suggested="  as_lineno_1=";
   
   as_suggested=$as_suggested$LINENO;
@@ -22,7 +26,10 @@
   as_suggested=$as_suggested" as_lineno_1a=\$LINENO   as_lineno_2=";
   
   as_suggested=$as_suggested$LINENO;
-  
+  # 关键是这里的as_run以及当前shell是否可用，分类讨论：
+  # （if test x$as_have_required = xyes && (eval "$as_suggested") 2>/dev/null; then : ）
+	  # 当前shell没问题，则as_have_required是yes，as_suggested也会通过，即使此时as_run为空，但是可以正常处理行号测试
+	  # 当前shell有问题，不论是as_have_required是no，还是as_suggested没通过，将执行下面的寻找shell可执行文件，寻找到shell可执行文件后，as_required也通过则as_run=a "$as_shell"，然后开始测试as_suggested，此时as_run 会替换成a，也就是做判断是否相等时为了避免出错的字母
   as_suggested=$as_suggested" as_lineno_2a=\$LINENO  
   eval 'test \"x\$as_lineno_1'\$as_run'\" != \"x\$as_lineno_2'\$as_run'\" &&  
   test \"x\`expr \$as_lineno_1'\$as_run' + 1\`\" = \"x\$as_lineno_2'\$as_run'\"' || exit 1  test \$(( 1 + 1 )) = 2 || exit 1"  
@@ -30,8 +37,11 @@
 ```
 - [ ] 逻辑有问题，在寻找可用的shell的时候（设置CONFIG_SHELL，很长一段if），如果一开始测试as_required和as_suggested不成功，且没有搜索成功，还将换回当前shell
 	- [ ] 这里有个问题：之前测试当前shell不成功，这里又设置回去了
-- [ ] 在测试mkdir的时候（as_fn_mkdir_p ()  内） 逻辑有误，空执行 eval $as_mkdir_p，这肯定是false啊
+- [x] 在测试mkdir的时候（as_fn_mkdir_p ()  内） 逻辑有误，空执行 eval $as_mkdir_p，这肯定是false啊
+	- `as_mkdir_p='mkdir -p "$as_dir"'  `，本身就是完整的命令，在下面提到的
 - [ ] 阅读策略有点问题，但是不知道如何解决这个问题，比如前面一直在定义环境和函数，定义环境没啥问题，但是定义函数，函数是后面要执行的，所以函数内涉及的变量可能是后面定义的，就导致很烦
+- [ ] 针对`ac_unique_file="move-if-change"  `的问题
+	- [x] 当第一次编译不成功或者手动终止，但是此时config.h文件已经存在了，那么第二进行编译的时候生成config.h.new与config.h相同，但是config.h并没有被编译，这不就出错死锁了
 ### 总览
 - Guess values for system-dependent variables and create Makefiles.
 	- 这个文件看起来像是用于配置软件构建系统的脚本， 它会检查系统环境和软件依赖， 然后生成用于编译软件的 Makefile 文件
@@ -45,6 +55,38 @@
 	- 在case语句中`#(`代表开启扩展正则的模式匹配，在这个模式下\*代表通配符，就像在shell终端里的`rm -rf *`一样，不再是普通正则里的`a*`代表“任意个”的意思
 - 哈哈哈哈哈，吐槽sed语法，好！很有精神！
 	- ` # Blame Lee E. McMahon (1931-1989) for sed's syntax.  :-) `
+	- sed语法确实不好用
+- 巨坑！！！
+```bash
+# bash “太笨了”
+# 对应as_shell遍历搜寻处代码
+echo 1  
+PATH_SEPARATOR=:  
+as_save_IFS=$IFS;IFS=$PATH_SEPARATOR
+
+# 这种写法是错的！！！
+# 虽然IFS是":"，但是如果直接写成 /bin:/usr/bin，那么将会把他们作为“一整个字符串”传递给for循环，而for循环直接开始“处理”这个字符串，因此不能正确的分隔
+for as_dir in /bin:/usr/bin
+
+
+# 以下两种方式都对
+# 在处理以下两种方式时，情况类似，都是先展开变量，再做分隔处理
+# 如果没有展开变量这一步，就不会做分隔处理
+# 1、以字符串变量传入（与前面的“多变量以字符串的方式传递”及“处理Zsh的alias -g '${1+"$@"}'='"$@"'”呼应上了）
+path_list="/bin:/usr/bin"
+# 这里应该使用变量，而不是直接在 for 循环中写字符串
+for as_dir in $path_list
+
+# 2、使用$PATH_SEPARATOR作为分隔
+for as_dir in /bin$PATH_SEPARATOR/usr/bin
+```
+- 变量以ac或as开通
+	- **`ac`** ：通常代表 "autoconf" 或 "auto configure"。这是 GNU `autoconf` 工具生成的脚本中的常见前缀，用于**配置过程中自动创建的变量**。例如，`ac_hostname` 可以被解释为 "autoconf hostname"，即配置过程中自动检测到的主机名。
+	- **`as`** ：通常代表 "autosh" 或 "auto script"，指的是自动生成的**脚本相关的变量**。类似于 `as_ln_s` 这样的变量，可能与自动检测某些系统功能相关，**表示脚本中与自动化行为**（如符号链接的创建）有关的配置。
+- 写一些系统脚本时，不希望与用户交互：`exec 7<&0 </dev/null `
+	- 将标准输入复制到7，将空设备连接到标准输入
+	- 可通过7恢复标准输入
+- 针对软件构建、更新、重新编译中的优化：`ac_unique_file="move-if-change"  `
 
 ### 变量记录
 #### 没用的
@@ -68,13 +110,15 @@
 - `as_opt`，与CONFIG_SHELL搭配使用，用于指定shell的操作选项
 - `_as_can_reexec`，指明脚本是否存在递归调用，影响了脚本是否可以被CONFIG_SHELL重新执行
 - `as_bourne_compatible`，让当前shell兼容Bourne shell的语法，主要针对Zsh，与上面操作类似，解决传参兼容性和POSIX兼容模式
+- `as_shell=$as_dir/$as_base  `:遍历寻找到的当前的shell的路径
+- `as_run=a "$as_shell"`：将a赋值给as_run，并运行shell
 #### 与我环境相关的
 - 打印调用的函数
 	- as_echo='printf %s\\n'  
 	- as_echo_n='printf %s'
 	- printf函数内置在（大多发行版）shell里
 - 系统环境(分隔符)：`PATH_SEPARATOR=:`
-- `IFS=" ""    $as_nl"  `：指定参数分隔符
+- `IFS=" ""    $as_nl"  `：指定参数分隔符，将 IFS 设置为空格、制表符和换行符
 ```bash 
 # 主提示符
 PS1='$ '  
@@ -145,6 +189,51 @@ test -x / || exit 1"
 - `as_fn_error () `：将错误信息写入指定的日志文件，并使用指定的状态码调用`as_fn_exit`来退出脚本
 - `as_expr=expr ; as_basename=basename; as_dirname=dirname `：expr（正则表达匹配）是否可用、basename（用于shell脚本中提取自身文件名）是否可用、dirname（获取父目录）是否可用
 - `as_me`：存储当前脚本名称
+- 定义了一组变量，用于表示不同类型的字符，包括小写字母、大写字母、字母（大小写）、数字和字母数字字符。
+```bash
+as_cr_letters='abcdefghijklmnopqrstuvwxyz'  
+as_cr_LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'  
+as_cr_Letters=$as_cr_letters$as_cr_LETTERS  
+as_cr_digits='0123456789'  
+as_cr_alnum=$as_cr_Letters$as_cr_digits  
+```
+- ` ECHO_N='-n'`:用于在后续的脚本中控制换行行为
+- `as_ln_s='ln -s' `
+- `as_mkdir_p='mkdir -p "$as_dir"'  `
+- `as_test_x='test -x' `
+- `as_executable_p=as_fn_executable_p  `
+- `exec 7<&0 </dev/null  `：将标准输入保存到文件描述符 7，可以在需要时恢复原本的标准输入，将空设备连接到标准输入，不接受输入
+- `exec 6>&1  `
+- 初始化一系列编译变量
+```bash
+# 获取hostname，主机名称，就是宿主机的名字，比如不论哪个用户，在物理机上都是casit205，我的docker是23fff41d56c2
+ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`  
+  
+#  
+# Initializations.  
+#  
+# 设置软件包安装的默认前缀目录为 /usr/local。即，如果没有指定安装目录，软件包会默认安装到这个路径。
+ac_default_prefix=/usr/local  
+# 初始化一个空变量 ac_clean_files，用于后续指定需要清理的文件。
+ac_clean_files=  
+# 设置库对象文件的目录，默认当前目录。
+# 库对象文件（Library Object File）是编译后生成的中间文件，通常以.o为后缀。
+# 这些文件包含了源代码的已编译机器指令，但还未与其他部分链接成可执行文件或共享库。它们是编译过程中生成的中间步骤，最终会被链接器（Linker）整合到一个完整的二进制文件或库中。
+ac_config_libobj_dir=.  
+# 初始化一个空变量 LIBOBJS，用于存储库对象文件的列表。
+# 在 configure 文件中，LIBOBJS 变量通常用于列出一些需要额外链接的对象文件，尤其是当特定系统上缺少某些功能时，这些库对象文件会提供替代实现。
+LIBOBJS=  
+# 表示当前配置不是用于交叉编译。(现在是第一步的编译属于AAB，在A上编译，编译出A用的工具，这个工具为了去编译B的程序)
+cross_compiling=no  
+subdirs=  
+# 初始化 make 工具的标志，用于编译时传递给 make 的选项。
+MFLAGS=  
+MAKEFLAGS=  
+```
+- `ac_unique_file="move-if-change"  `:在生成文件发生变化时才将其移动到目标位置
+- `enable_option_checking=no  `： 禁用配置选项检查。通常情况下，configure脚本会检查是否有未知的选项传入，如果禁用检查，可以避免脚本报错。
+- `ac_subst_vars`:定义了一些在构建过程中需要替换的变量
+
 ### 代码
 ```bash
 #! /bin/sh  
@@ -829,7 +918,8 @@ if (as_dir=`dirname -- /` && test "X$as_dir" = X/) >/dev/null 2>&1; then
 else  
   as_dirname=false  
 fi  
-  
+
+# 存储当前脚本名称
 as_me=`$as_basename -- "$0" ||  
 $as_expr X/"$0" : '.*/\([^/][^/]*\)/*$' \| \  
      X"$0" : 'X\(//\)$' \| \  
@@ -856,18 +946,35 @@ as_cr_letters='abcdefghijklmnopqrstuvwxyz'
 as_cr_LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'  
 as_cr_Letters=$as_cr_letters$as_cr_LETTERS  
 as_cr_digits='0123456789'  
-as_cr_alnum=$as_cr_Letters$as_cr_digits    
+as_cr_alnum=$as_cr_Letters$as_cr_digits  
   
-  
+# 还是在测试行号
   as_lineno_1=$LINENO as_lineno_1a=$LINENO  
   as_lineno_2=$LINENO as_lineno_2a=$LINENO  
+  # 检查 as_lineno_2 是否比 as_lineno_1 大 1。如果测试失败，则执行后面的花括号中的代码块。
   eval 'test "x$as_lineno_1'$as_run'" != "x$as_lineno_2'$as_run'" &&  
   test "x`expr $as_lineno_1'$as_run' + 1`" = "x$as_lineno_2'$as_run'"' || {  
+# 这段代码的主要目的是通过 sed 处理当前脚本的内容，生成一个新的脚本（$as_me.lineno），并执行这个新的脚本。
+# 同时采取了一些措施来防止在某些特定构建环境下陷入无限递归或因错误执行而导致的问题。
+# 整个流程中，LINENO 变量在多个步骤中被引用和处理，确保行号可以被正确地追踪和处理。
+  # 由于我可以执行成功所以不会执行花括号内的代码，所以就没有对应的打印
+  # sed 命令处理当前脚本 ($as_myself) 的内容，生成 $as_me.lineno 脚本（as_myself存储的是脚本自身完整路径）
   # Blame Lee E. McMahon (1931-1989) for sed's syntax.  :-)  
+  # -n :不要自动打印处理的行。这里的目的是手动控制哪些行被打印。
+  # p：打印所有行，意味着原始脚本的每一行都被打印输出。
   sed -n '  
     p  
     /[$]LINENO/=  
   ' <$as_myself |  
+# sed 's/[$]LINENO.*/&-/ ：替换 $LINENO 后的所有内容为原来的内容并加上 -。这里的目的是标记这些行。
+# t lineno：当 s/[$]LINENO.*/&-/ 替换成功时跳转到 lineno 标签继续处理。
+# b：直接跳到末尾，跳过后面的代码。
+# :lineno：定义一个名为 lineno 的标签。
+# N：读取下一行并将其附加到当前的模式空间。
+# s/[$]LINENO\([^'$as_cr_alnum'_].*\n\)\(.*\)/\2\1\2/：复杂的正则表达式，处理 $LINENO 后的非字母数字字符，可能用于重排行内容或处理某种注释。
+# t loop ：如果上一次替换成功，则跳回到 loop 标签，继续循环处理模式空间中的内容。
+# s/-\n.*// ：删除标记为 - 的行，以及它之后的换行符和所有内容。
+# 最终的结果是将 $LINENO 相关的行替换并生成一个新脚本 $as_me.lineno。对生成的脚本 $as_me.lineno 添加执行权限（+x），确保它是可执行的。
     sed '  
       s/[$]LINENO.*/&-/  
       t lineno  
@@ -880,63 +987,105 @@ as_cr_alnum=$as_cr_Letters$as_cr_digits
       s/-\n.*//  
     ' >$as_me.lineno &&  
   chmod +x "$as_me.lineno" ||  
+  # 如果生成 $as_me.lineno 或设置可执行权限失败，则输出错误消息，并退出脚本。
+# $as_echo 用于打印错误消息，as_fn_exit 1 用于退出，返回状态码 1。
     { $as_echo "$as_me: error: cannot create $as_me.lineno; rerun with a POSIX shell" >&2; as_fn_exit 1; }  
   
   # If we had to re-execute with $CONFIG_SHELL, we're ensured to have  
   # already done that, so ensure we don't try to do so again and fall  
   # in an infinite loop.  This has already happened in practice.  
+  # 定义并导出一个变量 _as_can_reexec，值为 no，表示禁止脚本再次被重新执行，防止陷入无限递归执行的情况。
   _as_can_reexec=no; export _as_can_reexec  
   # Don't try to exec as it changes $[0], causing all sort of problems  
   # (the dirname of $[0] is not the place where we might find the  
   # original and so on.  Autoconf is especially sensitive to this).  
+  # 这里特别指出不使用 exec 是因为 exec 会替换当前 shell 的进程，导致 $0 变量（当前脚本名称）发生变化，可能会影响构建系统的后续操作。Autoconf 对此特别敏感。 
+  # 通过 . (source) 命令执行生成的 $as_me.lineno 脚本，而不是通过 exec 命令执行。
+  # . 命令是 bash 中的 source 命令，它在当前 shell 中执行指定的脚本，而不会启动新的进程。
   . "./$as_me.lineno"  
   # Exit status is that of the last command.  
   exit  
-}  
-  
+}  # 行号测试结束
+
+
+
+
+
+# 检测 echo 命令的行为，因为在不同的系统和 shell 中，echo 命令的行为可能有所不同（例如是否支持 -n 选项，是否支持转义序列等
+# 在不同的 shell 和操作系统（如 AIX 等）上，echo 的行为有所不同，因此需要这样的代码来确保输出的一致性。
+# 初始化变量：
+# ECHO_C：控制是否在 echo 命令中使用 \c（表示不换行）。
+# ECHO_N：控制是否使用 -n 选项（也是表示不换行）。
+# ECHO_T：表示 echo 中的一个制表符，初始化为空。
 ECHO_C= ECHO_N= ECHO_T=  
 case `echo -n x` in #(((((  
+# 不支持“-n”选项
 -n*)  
   case `echo 'xy\c'` in  
+  # 如果输出包含 'c'，意味着 \c 没有起到禁止换行的作用。
   *c*) ECHO_T='    ';;    # ECHO_T is single tab character.  
+  # 如果输出为 'xy'，则表示 \c 被正确识别为换行控制符。
   xy)  ECHO_C='\c';;  
+# 处理一些特定平台的兼容性问题，比如 AIX。
+# 也就是说上述两种都没匹配到
   *)   echo `echo ksh88 bug on AIX 6.1` > /dev/null  
        ECHO_T='    ';;  
   esac;;  
 *)  
+# 如果 echo -n x 不输出 -n 而是直接输出 x，则表明系统支持 -n 选项控制不换行，因此 ECHO_N 被设置为 -n，用于在后续的脚本中控制换行行为。
   ECHO_N='-n';;  
 esac  
-  
+
+
+# 这段代码的主要目的是测试系统是否支持符号链接 ln -s，并根据系统的行为选择合适的命令（ln -s、ln 或 cp -pR）。如果符号链接或硬链接失败，它会自动回退到文件复制操作。同时，它会创建和清理一些临时文件夹和文件来完成这个过程。
+# $$ 是一个特殊的 shell 变量，表示当前 shell 进程的进程 ID (PID)
+# 本段没什么太大用，只是为了保证文件/文件类型不会冲突
 rm -f conf$$ conf$$.exe conf$$.file  
+# 防止 conf$$.dir 不是目录而是文件时的冲突。
 if test -d conf$$.dir; then  
   rm -f conf$$.dir/conf$$.file  
 else  
   rm -f conf$$.dir  
   mkdir conf$$.dir 2>/dev/null  
 fi  
+
+# 这一行尝试创建一个空文件 conf$$.file，并忽略任何错误。如果文件创建成功，则进入 then 块。
 if (echo >conf$$.file) 2>/dev/null; then  
   if ln -s conf$$.file conf$$ 2>/dev/null; then  
     as_ln_s='ln -s'  
     # ... but there are two gotchas:  
+    # MSYS : 在 MSYS（一个 Windows 环境）下，符号链接 ln -s file dir 和硬链接 ln file dir 都可能失败。
     # 1) On MSYS, both `ln -s file dir' and `ln file dir' fail.  
-    # 2) DJGPP < 2.04 has no symlinks; `ln -s' creates a wrapper executable.  
+    # DJGPP : DJGPP 2.04 以下版本不支持符号链接。ln -s 会生成一个包装的可执行文件。
+    # 2) DJGPP < 2.04 has no symlinks; `ln -s' creates a wrapper executable. 
+    # 因此，在这些情况下，程序将使用 cp -pR（递归复制文件并保留权限）来代替符号链接。 
     # In both cases, we have to default to `cp -pR'.  
     ln -s conf$$.file conf$$.dir 2>/dev/null && test ! -f conf$$.exe ||  
       as_ln_s='cp -pR'  
+  # 如果符号链接失败，代码会尝试使用硬链接 ln conf$$.file conf$$。如果成功，则将 as_ln_s 设置为硬链接 ln。
   elif ln conf$$.file conf$$ 2>/dev/null; then  
     as_ln_s=ln  
+# 如果硬链接也失败，最后会使用 cp -pR。
   else  
     as_ln_s='cp -pR'  
   fi  
+# 为文件创建不成功准备
 else  
   as_ln_s='cp -pR'  
 fi  
+ # rm -f conf$$ conf$$.exe conf$$.dir/conf$$.file conf$$.file : 删除所有生成的文件。
 rm -f conf$$ conf$$.exe conf$$.dir/conf$$.file conf$$.file  
+# rmdir conf$$.dir 2>/dev/null : 尝试删除空的 conf$$.dir 目录，忽略任何错误。
 rmdir conf$$.dir 2>/dev/null  
-  
+
+
+# 这一行代码尝试创建当前目录（.），并使用 -p 选项。-p 的意思是如果目录已经存在，不会报错；如果不存在，会递归创建。2>/dev/null 用于将标准错误输出重定向到空设备，即忽略任何错误。
+# 尝试创建当前目录 (mkdir -p .) 的主要目的是确保脚本执行时工作目录是可写的，并且能够正确地创建和使用目录结构。
 if mkdir -p . 2>/dev/null; then  
   as_mkdir_p='mkdir -p "$as_dir"'  
+# 如果 `mkdir -p .` 失败（这在一些极端或不常见的环境中可能发生）
 else  
+# 检查是否存在一个名为 -p 的目录（注意：这可能是一个错误创建的目录），如果存在，则删除它。(因为上面的mkdir如果不支持“-p”，则会创建一个“-p”文件夹)
   test -d ./-p && rmdir ./-p  
   as_mkdir_p=false  
 fi  
@@ -945,42 +1094,73 @@ as_test_x='test -x'
 as_executable_p=as_fn_executable_p  
   
 # Sed expression to map a string onto a valid CPP name.  
+# 通过 sed 工具处理字符串，确保CPP名称符合 C++ 名称的有效性规则。
+# y%*$as_cr_letters%P$as_cr_LETTERS% : 将所有小写字母转换为大写字母。
+# s%[^_$as_cr_alnum]%_%g : 将所有不属于字母、数字和下划线的字符替换为下划线。
 as_tr_cpp="eval sed 'y%*$as_cr_letters%P$as_cr_LETTERS%;s%[^_$as_cr_alnum]%_%g'"  
   
 # Sed expression to map a string onto a valid variable name.  
+# 将字符串转换为有效的 shell 变量名，遵循类似的规则
+# y%*+%pp% : 将 * 和 + 替换为 p。
+# s%[^_$as_cr_alnum]%_%g : 将所有不合法的字符替换为下划线。
 as_tr_sh="eval sed 'y%*+%pp%;s%[^_$as_cr_alnum]%_%g'"  
   
-  
+# 测试 DJDIR 是为了确定用户是否已经设置了一个特定的路径，通常用于开发或构建环境的定制。
+# 这一部分将文件描述符 0（即标准输入，通常是键盘输入）复制到文件描述符 7。
+# 这样做的目的是保存当前的标准输入，后续可以通过文件描述符 7 来恢复或使用原来的标准输入流。
+# 通常在配置脚本或后台运行的程序中，可能不需要标准输入（比如没有用户交互），也不希望程序在执行时等待用户输入。通过将标准输入重定向到 /dev/null，可以避免程序等待输入或意外地从标准输入读取数据。同时，将标准输入保存到文件描述符 7，可以在需要时恢复原本的标准输入。如果后续代码中需要重新访问标准输入，程序可以通过 7<&0 来重新获取。
+# 为了避免不必要的用户交互或意外的标准输入读取，并提供恢复原始标准输入的能力。
 test -n "$DJDIR" || exec 7<&0 </dev/null  
 exec 6>&1  
   
 # Name of the host.  
 # hostname on some systems (SVR3.2, old GNU/Linux) returns a bogus exit status,  
 # so uname gets run too.  
+# 获取hostname，主机名称，就是宿主机的名字，比如不论哪个用户，在物理机上都是casit205
 ac_hostname=`(hostname || uname -n) 2>/dev/null | sed 1q`  
   
 #  
 # Initializations.  
 #  
+# 设置软件包安装的默认前缀目录为 /usr/local。即，如果没有指定安装目录，软件包会默认安装到这个路径。
 ac_default_prefix=/usr/local  
+# 初始化一个空变量 ac_clean_files，用于后续指定需要清理的文件。
 ac_clean_files=  
+# 设置库对象文件的目录，默认当前目录。
+# 库对象文件（Library Object File）是编译后生成的中间文件，通常以.o为后缀。
+# 这些文件包含了源代码的已编译机器指令，但还未与其他部分链接成可执行文件或共享库。它们是编译过程中生成的中间步骤，最终会被链接器（Linker）整合到一个完整的二进制文件或库中。
 ac_config_libobj_dir=.  
+# 初始化一个空变量 LIBOBJS，用于存储库对象文件的列表。
+# 在 configure 文件中，LIBOBJS 变量通常用于列出一些需要额外链接的对象文件，尤其是当特定系统上缺少某些功能时，这些库对象文件会提供替代实现。
 LIBOBJS=  
+# 表示当前配置不是用于交叉编译。(现在是第一步的编译属于AAB，在A上编译，编译出A用的工具，这个工具为了去编译B的程序)
 cross_compiling=no  
 subdirs=  
+# 初始化 make 工具的标志，用于编译时传递给 make 的选项。
 MFLAGS=  
 MAKEFLAGS=  
   
 # Identity of this package.  
+# 定义了与软件包身份相关的变量
+# 软件包的名称、软件包的 tar 文件名、版本号
 PACKAGE_NAME=  
 PACKAGE_TARNAME=  
 PACKAGE_VERSION=  
+# 通常是PACKAGE_NAME和PACKAGE_VERSION的组合
 PACKAGE_STRING=  
+# 用于报告软件包问题的联系信息（通常是电子邮件地址）
 PACKAGE_BUGREPORT=  
+# 软件包的相关链接或主页的 URL。
 PACKAGE_URL=  
-  
+
+# ac_unique_file 是一个与自动配置（autoconf）工具相关的变量。这个变量通常用来指定一个独特的文件名，用于跟踪和管理生成文件的状态。
+# "move-if-change" 是一种机制，通常用于在生成文件发生变化时才将其移动到目标位置。这样做的目的是避免在文件内容没有改变的情况下不必要的写操作，从而提高构建过程的效率。这对于大型项目特别有用，因为它减少了重复编译的次数，节省了构建时间。（更多用于软件构建、更新、重新编译）
+# 比如现在软件构建过程中，通过配置文件生成一个config.h文件，正常流程是编译config.h进行后续工作，但是现在对软件进行升级，升级过程中，生成临时文件config.h.new，move-if-change 工具会检查两个文件是否相同，相同则什么都不做，不同则继续进行后续操作
 ac_unique_file="move-if-change"  
+# 禁用配置选项检查。通常情况下，configure脚本会检查是否有未知的选项传入，如果禁用检查，可以避免脚本报错。
 enable_option_checking=no  
+# 定义了一些在构建过程中需要替换的变量（应该是一种编程规范）
+# 在构建过程中需要替换的变量，通常是指那些在configure脚本或构建系统中通过特定方式定义或导出的变量，它们根据不同的配置和环境被动态替换。
 ac_subst_vars='LTLIBOBJS  
 LIBOBJS  
 compare_exclusions  
@@ -1189,11 +1369,14 @@ PACKAGE_TARNAME
 PACKAGE_NAME  
 PATH_SEPARATOR  
 SHELL'  
+# ac_subst_files是一个在配置过程中用于替换的文件列表。这些文件通常会包含需要根据不同构建环境进行动态生成的内容。
+# 这些文件中的变量和设置将在配置时根据具体环境被替换，从而生成适合当前环境的最终配置文件。
 ac_subst_files='serialization_dependencies  
 host_makefile_frag  
 target_makefile_frag  
 alphaieee_frag  
 ospace_frag'  
+# ac_user_opts是用户在配置过程中可以选择或传递的选项。这些选项允许用户根据需求自定义构建环境。
 ac_user_opts='  
 enable_option_checking  
 with_build_libsubdir  
@@ -1255,6 +1438,7 @@ enable_maintainer_mode
 enable_stage1_checking  
 enable_werror  
 '  
+# ac_precious_vars 变量中定义了一些在构建过程中需要特别保存或保留的关键变量。这些变量通常和编译器设置、平台信息、以及编译选项有关。
       ac_precious_vars='build_alias  
 host_alias  
 target_alias  
