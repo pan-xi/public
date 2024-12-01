@@ -1696,7 +1696,9 @@ do
   esac  
   
   # Accept the important Cygnus configure options, so we can diagnose typos.  
-  
+  # 处理和验证 configure 脚本中的重要选项，以便在用户输入错误时能够提供有用的错误信息。
+  # Cygnus 是一个早期的 GNU 工具链项目，configure 脚本中的一些选项可能与 Cygnus 项目相关。这些选项通常用于配置编译环境，例如指定安装路径、启用或禁用某些功能等。
+  # 通过接受这些重要的配置选项，脚本可以检查用户输入的选项是否有拼写错误。如果用户输入的选项不在已知的选项列表中，脚本可以提示用户输入错误，帮助用户纠正拼写错误。
   case $ac_dashdash$ac_option in  
   --)  
     ac_dashdash=yes ;;  
@@ -2012,11 +2014,12 @@ do
   -x-libraries=* | --x-libraries=* | --x-librarie=* | --x-librari=* \  
   | --x-librar=* | --x-libra=* | --x-libr=* | --x-lib=* | --x-li=* | --x-l=*)  
     x_libraries=$ac_optarg ;;  
-  
+  # 如果遇到未识别的选项，报错并提示用户使用 --help 获取更多信息
+  # call back：`as_fn_error () `：将错误信息写入指定的日志文件，并使用指定的状态码调用`as_fn_exit`来退出脚本
   -*) as_fn_error $? "unrecognized option: \`$ac_option'  
 Try \`$0 --help' for more information"  
     ;;  
-  
+  # 处理等号赋值的选项：识别+提取+导出
   *=*)  
     ac_envvar=`expr "x$ac_option" : 'x\([^=]*\)='`  
     # Reject names that are not valid shell variable names.  
@@ -2026,7 +2029,8 @@ Try \`$0 --help' for more information"
     esac  
     eval $ac_envvar=\$ac_optarg  
     export $ac_envvar ;;  
-  
+    
+  # 处理其他未识别的选项，发出警告并尝试将选项值分配给 build_alias、host_alias 和 target_alias。
   *)  
     # FIXME: should be removed in autoconf 3.0.  
     $as_echo "$as_me: WARNING: you should use --build, --host, --target" >&2  
